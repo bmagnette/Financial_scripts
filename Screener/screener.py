@@ -1,26 +1,15 @@
 from bs4 import BeautifulSoup
-import requests
 import pandas as pd
 from datetime import datetime
-from stem import Signal
-from stem.control import Controller
 from torrequest import TorRequest
+import time
 
 accountant = ['cash-flow', 'balance-sheet', 'financials']
-tickers_list = ['OSI.PA']
 marketplace = 'PAR'
-start = datetime.now()
-
-pays = ['USA' 'Australia' 'Indonesia' 'Germany' 'France' 'Canada' 'Belgium'
- 'Argentina' 'United Kingdom''Malaysia' 'Netherlands' 'Switzerland'
- 'Taiwan' 'Norway' 'Sweden' 'Denmark' 'Austria' 'Brazil' 'Singapore'
- 'India' 'Mexico' 'Hong Kong' 'New Zealand' 'Spain' 'Ireland' 'Russia'
- 'Italy' 'Greece' 'Portugal' 'Israel' 'Turkey' 'Estonia' 'Thailand'
- 'Finland' 'Iceland' 'Latvia' 'South Korea' 'Lithuania' 'Qatar' 'China'
- 'Venezuela']
+now = datetime.now().strftime("%H:%M:%S")
 
 
-def get_financial(company):
+def get_financial(tor, company):
     """
     Request the financial information from Yahoo Finance
     :return: Dataframe with all financial information
@@ -30,8 +19,12 @@ def get_financial(company):
     writer = pd.ExcelWriter('XLS/{}.xlsx'.format(company))
 
     for elements_financier in accountant:
-        r = requests.get("https://fr.finance.yahoo.com/quote/{}/{}?p={}".format(company, elements_financier, ticker))
-        if r.status_code != 200: print(r.status_code, ":", r.reason)
+        r = tor.get("https://fr.finance.yahoo.com/quote/{}/{}?p={}".format(company, elements_financier, ticker))
+        if r.status_code != 200:
+            print(r.status_code, ":", r.reason)
+            time.sleep(10)
+            financial_df = get_financial(tor, company)
+            return financial_df
 
         soup = BeautifulSoup(r.text, "lxml")
         tables = soup.find_all('table')
@@ -59,22 +52,22 @@ def get_financial(company):
                 df = df.append([raw])
                 del raw[:]
         df.set_index([0], inplace=True)
-        df.to_excel(writer, elements_financier)
+        #df.to_excel(writer, elements_financier)
         financial_df = pd.concat([financial_df, df])
-    writer.save()
-    print("########{}########".format(company))
+    #writer.save()
     return financial_df
 
 
-def get_summary(company):
+def get_summary(tor, company):
     """
     Get additional information on company
     :return: Summary DataFrame
     """
     summary_info = pd.DataFrame()
     raw = []
-    r = requests.get("https://fr.finance.yahoo.com/quote/{}?p={}".format(company, company))
-    if r.status_code != 200: print(r.status_code, ":", r.reason)
+    r = tor.get("https://fr.finance.yahoo.com/quote/{}?p={}".format(company, company))
+    if r.status_code != 200:
+        print(r.status_code, ":", r.reason)
 
     soup = BeautifulSoup(r.text, "lxml")
     tables = soup.find_all('table')
@@ -91,51 +84,58 @@ def get_summary(company):
     return summary_info
 
 
-def compute_financial(financial_info, summary_info):
+def compute_financial(financial_info, summary_info, ticker):
     """
     Compute ratio depending of financial information
     :return: If company verify the ratio
     """
-    caf, benefice, long_debt, investment, cash, capitalisation, ebit = get_raw(financial_info, summary_info)
+    caf, benefice, long_debt, investment, cash, capitalisation, ebit, cap_display, cp = get_raw(financial_info, summary_info, '2017')
 
-    investment = investment.apply(cleaner)
-    cash = cash.apply(cleaner)
-    long_debt = long_debt.apply(cleaner)
-    ebit = ebit.apply(cleaner)
-    caf = caf.apply(cleaner)
+    # Calcul
+    enterprise_value = float(capitalisation) + long_debt - investment - cash
 
-    try:
-        enterprise_value = int(capitalisation) + int(long_debt.iloc[0]) - int(investment.iloc[0]) - int(cash.iloc[0])
-        print("Capitalisation : ", capitalisation)
-        print("EV :", enterprise_value)
-        print("EBIT :", ebit.iloc[0])
-        print("CAF :", caf.iloc[0])
-        print("DEBT", long_debt.iloc[0])
+    caf_debt = caf/long_debt
+    ev_ebit = enterprise_value/ebit
 
-    except ValueError:
-        print(long_debt.iloc[0], investment.iloc[0], cash.iloc(0))
+    return_on_requity = benefice/cp
+
+    if 0 <= ev_ebit <= 10.0 and caf_debt <= 5.0 and return_on_requity >= 0.1:
+        print("########{}########".format(ticker))
+        print("Capitalisation : ", cap_display)
+        print("EV : ", enterprise_value)
+        print("EBIT :", ebit)
+        print("EV/EBIT :", ev_ebit)
+        print("CAF/DEBT :", caf_debt)
+        print("ROE :", return_on_requity)
+        #print("ROIC : ")
 
 
-def get_raw(financial_info, summary_info):
+def get_raw(financial_info, summary_info, year):
+    annee = 0
+
+    if financial_info.iloc[:, 0].str.match("0").count() >= 10:
+        annee = 2
+
+    financial_info.iloc[1:, :] = financial_info.iloc[1:, :].applymap(cleaner)
     capitalisation = cleaner2(summary_info.loc['Cap. boursière', 1])
-    caf = financial_info.loc['Flux total de trésorerie des activités d’exploitation']
-    ebit = financial_info.loc['Bénéfice ou perte d’exploitation']
-    benefice = financial_info.loc['Bénéfice net']
-    long_debt = financial_info.loc['Dette à long terme']
-    investment = financial_info.loc['Investissements']
-    cash = financial_info.loc['Espèces et quasi-espèces']
+    cap_display = summary_info.loc['Cap. boursière', 1]
+    caf = financial_info.loc['Flux total de trésorerie des activités d’exploitation', annee]
+    ebit = financial_info.loc['Bénéfice ou perte d’exploitation', annee]
+    benefice = financial_info.loc['Bénéfice net', annee]
+    benefice = benefice.iloc[0]
+    long_debt = financial_info.loc['Dette à long terme', annee]
+    investment = financial_info.loc['Investissements', annee]
+    cash = financial_info.loc['Espèces et quasi-espèces', annee]
+    cp = financial_info.loc['Total des capitaux propres', annee]
 
-    return caf, benefice, long_debt, investment, cash, capitalisation, ebit
+    return caf, benefice, long_debt, investment, cash, capitalisation, ebit, cap_display, cp
 
 
 def cleaner(x):
-    try:
-        x = x.replace("\xa0", '')
-        if len(x) == 1:
-            x = 0
-        return x
-    except AttributeError:
-        print("AttributeError : Empty table N°")
+    x = str(x).replace("\xa0", '')
+    if len(x) == 1 or str(x) == "None" or "/" in str(x):
+        x = 0
+    return float(x)
 
 
 def cleaner2(x):
@@ -146,10 +146,11 @@ def cleaner2(x):
         x = x[:-1]
         x = x.replace(",", '')
         x = x + '000'
-    return x
+    return float(x)
 
 
 def select_company():
+    print(now, "### SELECT COMPANIES FROM XLSX ###")
     main_company = pd.read_excel('XLS/yahoo_tickers.xlsx', sheet_name='Stock', skiprows=3)
     df_companies = main_company[main_company['Exchange'] == marketplace]
     print("Start the scrapping for ", len(df_companies))
@@ -157,37 +158,52 @@ def select_company():
     return list_tickers
 
 
-def get_tor_session():
-    s = requests.session()
-    # Tor uses the 9050 port as the default socks port
-    s.proxies = {'http':  'socks5://127.0.0.1:9150',
-                       'https': 'socks5://127.0.0.1:9150'}
-    return s
-
-
-# signal TOR for a new connection
-def renew_connection():
-    with Controller.from_port(port=9051) as controller:
-        controller.authenticate(password="password")
-        controller.signal(Signal.NEWNYM)
-
-
 if __name__ == '__main__':
-    session = get_tor_session()
-    print(session.get("http://httpbin.org/ip").text)
-    # Above should print an IP different than your public IP
-    # Following prints your normal public IP
-    print(requests.get("http://httpbin.org/ip").text)
-    renew_connection()
-    session = get_tor_session()
-    print(session.get("http://httpbin.org/ip").text)
+    nb_requests, analyzed, error = 0, 0, 0
+    keyerror_list, valuerror_list, indexerror_list, zerodivision_list = [], [], [], []
+    list_companies = select_company()
+    with TorRequest(proxy_port=9150, ctrl_port=9051, password='password') as tr:
+        # Making 4 requests by company
+        for ticker in list_companies:
+            try:
+                nb_requests += 4
+                analyzed += 1
+                financial = get_financial(tr, ticker)
+                summary = get_summary(tr, ticker)
+                compute_financial(financial, summary, ticker)
+                if nb_requests >= 75:
+                    nb_requests = 0
 
-    """list_companies = select_company()
-    for ticker in list_companies:
-        try:
-            financial = get_financial(session, ticker)
-            summary = get_summary(session, ticker)
-            compute_financial(financial, summary)
-        except KeyError:
-            print("KeyError : Ticker doesn't exist anymore.")"""
+                    r1 = tr.get('http://ipecho.net/plain')
+                    tr.reset_identity()
+                    r2 = tr.get('http://ipecho.net/plain')
+                    print("-----------")
+                    print(analyzed,"/", len(list_companies), " : ", datetime.now().strftime("%H:%M:%S"))
+                    print(r1.text, "---->", r2.text)
+                    print("Error : ", error/analyzed)
+                    print("-----------")
+            except KeyError:
+                error += 1
+                keyerror_list.append(ticker)
+                #print("KeyError : Ticker doesn't exist anymore.")
+            except ZeroDivisionError:
+                error += 1
+                zerodivision_list.append(ticker)
+                #print("ZeroDivisionError : DEBT or EBIT null")
+            except ValueError:
+                error += 1
+                valuerror_list.append(ticker)
+                #print("ValueError : Empty")
+            except IndexError:
+                indexerror_list.append(ticker)
+                error += 1
+                #print("IndexError : Empty")
+    print("KeyError : ", keyerror_list)
+    print("ZeroDivisionError : ", zerodivision_list)
+    print("ValueError : ", valuerror_list)
+    print("IndexError : ", indexerror_list)
+
+
+
+
 
