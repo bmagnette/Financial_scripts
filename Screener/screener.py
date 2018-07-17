@@ -1,3 +1,5 @@
+from typing import Any
+
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime
@@ -6,20 +8,19 @@ import time
 
 accountant = ['cash-flow', 'balance-sheet', 'financials']
 marketplace = 'PAR'
-now = datetime.now().strftime("%H:%M:%S")
+url = "https://fr.finance.yahoo.com/quote/"
 
 
-def get_financial(tor, company):
+def get_financial(tor: TorRequest, company: str)-> pd.DataFrame:
     """
-    Request the financial information from Yahoo Finance
-    :return: Dataframe with all financial information
+    Get accountability information on company
     """
 
     financial_df = pd.DataFrame()
-    writer = pd.ExcelWriter('XLS/{}.xlsx'.format(company))
+    #writer = pd.ExcelWriter('XLS/{}.xlsx'.format(company))
 
     for elements_financier in accountant:
-        r = tor.get("https://fr.finance.yahoo.com/quote/{}/{}?p={}".format(company, elements_financier, ticker))
+        r = tor.get(url + "{}/{}?p={}".format(company, elements_financier, ticker))
         if r.status_code != 200:
             print(r.status_code, ":", r.reason)
             time.sleep(10)
@@ -58,14 +59,14 @@ def get_financial(tor, company):
     return financial_df
 
 
-def get_summary(tor, company):
+def get_summary(tor: TorRequest, company: str)-> pd.DataFrame:
     """
     Get additional information on company
     :return: Summary DataFrame
     """
     summary_info = pd.DataFrame()
     raw = []
-    r = tor.get("https://fr.finance.yahoo.com/quote/{}?p={}".format(company, company))
+    r = tor.get(url + "{}?p={}".format(company, company))
     if r.status_code != 200:
         print(r.status_code, ":", r.reason)
 
@@ -110,7 +111,7 @@ def compute_financial(financial_info, summary_info, ticker):
         #print("ROIC : ")
 
 
-def get_raw(financial_info, summary_info, year):
+def get_raw(financial_info:pd.DataFrame, summary_info:pd.DataFrame, year):
     annee = 0
 
     if financial_info.iloc[:, 0].str.match("0").count() >= 10:
@@ -131,14 +132,14 @@ def get_raw(financial_info, summary_info, year):
     return caf, benefice, long_debt, investment, cash, capitalisation, ebit, cap_display, cp
 
 
-def cleaner(x):
+def cleaner(x: Any)-> float:
     x = str(x).replace("\xa0", '')
     if len(x) == 1 or str(x) == "None" or "/" in str(x):
         x = 0
     return float(x)
 
 
-def cleaner2(x):
+def cleaner2(x: Any)-> float:
     if 'M' in x:
         x = x[:-1]
         x = x.replace(",", '')
@@ -149,8 +150,8 @@ def cleaner2(x):
     return float(x)
 
 
-def select_company():
-    print(now, "### SELECT COMPANIES FROM XLSX ###")
+def select_company()-> list:
+    print(datetime.now().strftime("%H:%M:%S"), "### SELECT COMPANIES FROM XLSX ###")
     main_company = pd.read_excel('XLS/yahoo_tickers.xlsx', sheet_name='Stock', skiprows=3)
     df_companies = main_company[main_company['Exchange'] == marketplace]
     print("Start the scrapping for ", len(df_companies))
@@ -166,6 +167,7 @@ if __name__ == '__main__':
         # Making 4 requests by company
         for ticker in list_companies:
             try:
+                print(ticker)
                 nb_requests += 4
                 analyzed += 1
                 financial = get_financial(tr, ticker)
