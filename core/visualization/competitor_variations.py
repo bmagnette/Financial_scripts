@@ -46,6 +46,14 @@ def get_data(start_bands: str, end_bands: str, tickers_list: str) -> pd.DataFram
     return main_df
 
 
+def get_competitor():
+    """
+    Possibilities : Database, Screener
+    US : Hoover's Online, OneSource, Marketing sites etc.
+    FR :
+    """
+
+
 def plot_data(data: pd.DataFrame)-> None:
     """
     Plot data using matplotlib

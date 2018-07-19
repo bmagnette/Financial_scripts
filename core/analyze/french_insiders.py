@@ -14,37 +14,43 @@ def fct(x):
     return x
 
 
-def get_transaction_data(**args)-> pd.DataFrame():
+def get_api_transaction_data(**args)-> pd.DataFrame():
     """ Get french insiders transactions via lestransactions.fr """
-    resp = requests.get(url_api, params=args)
+    resp = requests.get(url_api, data=args)
 
     if resp.status_code is 200:
-        data = json.loads(resp.text)
+        data = resp.text
         print(data)
     else:
         print(resp.status_code, resp.reason)
 
 
-def analyze():
-    print("")
+def get_excel_transaction_data(**args)-> pd.DataFrame():
+    excel_data = pd.read_csv(DIR_PATH + "/core/analyze/data/data.csv", error_bad_lines=False, sep=';', header=1)
+
+    for k, v in args.items():
+        excel_data = excel_data[excel_data[k].str.contains(v)]
+
+    return excel_data
 
 
-if __name__ == '__main__':
-    #get_transaction_data(isin="FR0004152882")
-
-    test = pd.read_csv(DIR_PATH + "/data/data.csv", error_bad_lines=False, sep=';', header=1)
-    df = test[test['ISIN'] == 'FR0010465534']
-
+def analyze(df: pd.DataFrame())-> pd.DataFrame():
     df.loc[:, 'Déclarant'].apply(fct)
 
-    acquisition = df[df['Nature'] == 'Acquisition']
-    cession = df[df['Nature'] == 'Cession']
-
-    acquisition = acquisition.groupby(['Déclarant'])['Volume'].sum()
-    cession = cession.groupby(['Déclarant'])['Volume'].sum()
-
+    acquisition = df[df['Nature'] == 'Acquisition'].groupby(['Déclarant'])['Volume'].sum()
+    cession = df[df['Nature'] == 'Cession'].groupby(['Déclarant'])['Volume'].sum()
     print("### Acquisition ###")
     print(acquisition)
 
     print("### cession ###")
     print(cession)
+
+
+if __name__ == '__main__':
+    get_api_transaction_data(isin="FR0004152882")
+
+    # Columns = Prix, Nature, Instrument, Volume, Total, Date, Déclarant, Société, ISIN
+    #main_df = get_excel_transaction_data(ISIN="FR0004152882", Déclarant="Hugues")
+
+
+

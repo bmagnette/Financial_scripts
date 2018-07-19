@@ -20,6 +20,7 @@ Input : Dump of yahoo tickers (100k enterprise)
     Working progress :
 
     - Search for competitor method.
+    - Add visualisation on accountability compare to capitalization : Espèces et quasi-espèces, Investissements à court terme, Dette à long terme
 
 ### Insider trading
 

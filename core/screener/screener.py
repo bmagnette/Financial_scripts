@@ -5,22 +5,23 @@ import pandas as pd
 from datetime import datetime
 from torrequest import TorRequest
 import time
+import logging
 
 accountant = ['cash-flow', 'balance-sheet', 'financials']
 marketplace = 'PAR'
 url = "https://fr.finance.yahoo.com/quote/"
 
 
-def get_financial(tor: TorRequest, company: str)-> pd.DataFrame:
+def get_financial(tor: TorRequest, company: str) -> pd.DataFrame:
     """
     Get accountability information on company
     """
 
     financial_df = pd.DataFrame()
-    #writer = pd.ExcelWriter('XLS/{}.xlsx'.format(company))
+    # writer = pd.ExcelWriter('XLS/{}.xlsx'.format(company))
 
     for elements_financier in accountant:
-        r = tor.get(url + "{}/{}?p={}".format(company, elements_financier, ticker))
+        r = tor.get(url + "{}/{}?p={}".format(company, elements_financier, company))
         if r.status_code != 200:
             print(r.status_code, ":", r.reason)
             time.sleep(10)
@@ -53,16 +54,15 @@ def get_financial(tor: TorRequest, company: str)-> pd.DataFrame:
                 df = df.append([raw])
                 del raw[:]
         df.set_index([0], inplace=True)
-        #df.to_excel(writer, elements_financier)
+        # df.to_excel(writer, elements_financier)
         financial_df = pd.concat([financial_df, df])
-    #writer.save()
+    # writer.save()
     return financial_df
 
 
-def get_summary(tor: TorRequest, company: str)-> pd.DataFrame:
+def get_summary(tor: TorRequest, company: str) -> pd.DataFrame:
     """
     Get additional information on company
-    :return: Summary DataFrame
     """
     summary_info = pd.DataFrame()
     raw = []
@@ -88,17 +88,17 @@ def get_summary(tor: TorRequest, company: str)-> pd.DataFrame:
 def compute_financial(financial_info, summary_info, ticker):
     """
     Compute ratio depending of financial information
-    :return: If company verify the ratio
     """
-    caf, benefice, long_debt, investment, cash, capitalisation, ebit, cap_display, cp = get_raw(financial_info, summary_info, '2017')
+    caf, benefice, long_debt, investment, cash, capitalisation, ebit, cap_display, cp = get_raw(financial_info,
+                                                                                                summary_info, '2017')
 
     # Calcul
     enterprise_value = float(capitalisation) + long_debt - investment - cash
 
-    caf_debt = caf/long_debt
-    ev_ebit = enterprise_value/ebit
+    caf_debt = caf / long_debt
+    ev_ebit = enterprise_value / ebit
 
-    return_on_requity = benefice/cp
+    return_on_requity = benefice / cp
 
     if 0 <= ev_ebit <= 10.0 and caf_debt <= 5.0 and return_on_requity >= 0.1:
         print("########{}########".format(ticker))
@@ -108,10 +108,10 @@ def compute_financial(financial_info, summary_info, ticker):
         print("EV/EBIT :", ev_ebit)
         print("CAF/DEBT :", caf_debt)
         print("ROE :", return_on_requity)
-        #print("ROIC : ")
+        # print("ROIC : ")
 
 
-def get_raw(financial_info:pd.DataFrame, summary_info:pd.DataFrame, year):
+def get_raw(financial_info: pd.DataFrame, summary_info: pd.DataFrame, year):
     annee = 0
 
     if financial_info.iloc[:, 0].str.match("0").count() >= 10:
@@ -132,14 +132,14 @@ def get_raw(financial_info:pd.DataFrame, summary_info:pd.DataFrame, year):
     return caf, benefice, long_debt, investment, cash, capitalisation, ebit, cap_display, cp
 
 
-def cleaner(x: Any)-> float:
+def cleaner(x: Any) -> float:
     x = str(x).replace("\xa0", '')
     if len(x) == 1 or str(x) == "None" or "/" in str(x):
         x = 0
     return float(x)
 
 
-def cleaner2(x: Any)-> float:
+def cleaner2(x: Any) -> float:
     if 'M' in x:
         x = x[:-1]
         x = x.replace(",", '')
@@ -150,7 +150,7 @@ def cleaner2(x: Any)-> float:
     return float(x)
 
 
-def select_company()-> list:
+def select_company() -> list:
     print(datetime.now().strftime("%H:%M:%S"), "### SELECT COMPANIES FROM XLSX ###")
     main_company = pd.read_excel('XLS/yahoo_tickers.xlsx', sheet_name='Stock', skiprows=3)
     df_companies = main_company[main_company['Exchange'] == marketplace]
@@ -180,32 +180,27 @@ if __name__ == '__main__':
                     tr.reset_identity()
                     r2 = tr.get('http://ipecho.net/plain')
                     print("-----------")
-                    print(analyzed,"/", len(list_companies), " : ", datetime.now().strftime("%H:%M:%S"))
+                    print(analyzed, "/", len(list_companies), " : ", datetime.now().strftime("%H:%M:%S"))
                     print(r1.text, "---->", r2.text)
-                    print("Error : ", error/analyzed)
+                    print("Error : ", error / analyzed)
                     print("-----------")
             except KeyError:
                 error += 1
                 keyerror_list.append(ticker)
-                #print("KeyError : Ticker doesn't exist anymore.")
+                # print("KeyError : Ticker doesn't exist anymore.")
             except ZeroDivisionError:
                 error += 1
                 zerodivision_list.append(ticker)
-                #print("ZeroDivisionError : DEBT or EBIT null")
+                # print("ZeroDivisionError : DEBT or EBIT null")
             except ValueError:
                 error += 1
                 valuerror_list.append(ticker)
-                #print("ValueError : Empty")
+                # print("ValueError : Empty")
             except IndexError:
                 indexerror_list.append(ticker)
                 error += 1
-                #print("IndexError : Empty")
+                # print("IndexError : Empty")
     print("KeyError : ", keyerror_list)
     print("ZeroDivisionError : ", zerodivision_list)
     print("ValueError : ", valuerror_list)
     print("IndexError : ", indexerror_list)
-
-
-
-
-
